@@ -30,7 +30,6 @@ jobs:
         run: |
           export CUDA_HOME=/usr/local/cuda-11.8  # Explicit CUDA 11.8 path
           export PATH=/usr/local/cuda-11.8/bin:$PATH
-          cd custom_rasterizer
           python3.11 setup.py bdist_wheel
 
       - name: Upload wheel

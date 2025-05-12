@@ -1,4 +1,4 @@
-name: Build custom_rasterizer CUDA wheel (Python 3.11, Linux)
+name: Build custom_rasterizer wheel (Python 3.11, CUDA 11.8)
 
 on:
   workflow_dispatch:
@@ -7,33 +7,36 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04  # CUDA 11.8 base
+      image: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
     defaults:
       run:
         shell: bash
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Install Python 3.11
+      - name: Install system dependencies
         run: |
           apt-get update
           apt-get install -y python3.11 python3.11-dev python3-pip build-essential ninja-build
+          ln -s /usr/bin/python3.11 /usr/bin/python
 
       - name: Install PyTorch with CUDA 11.8
         run: |
-          python3.11 -m pip install --upgrade pip setuptools wheel
-          python3.11 -m pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 --index-url https://download.pytorch.org/whl/cu118
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 --index-url https://download.pytorch.org/whl/cu118
 
-      - name: Build the CUDA wheel
+      - name: Build wheel with explicit CUDA config
         run: |
-          export CUDA_HOME=/usr/local/cuda-11.8  # Explicit CUDA 11.8 path
-          export PATH=/usr/local/cuda-11.8/bin:$PATH
-          python3.11 setup.py bdist_wheel
+          export CUDA_HOME=/usr/local/cuda
+          export PATH=/usr/local/cuda/bin:$PATH
+          export TORCH_CUDA_ARCH_LIST="8.0"  # For T4/A100 GPUs
+          export FORCE_CUDA=1
+          python setup.py bdist_wheel
 
-      - name: Upload wheel
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: custom_rasterizer-cuda-wheel
+          name: custom_rasterizer-wheel
           path: custom_rasterizer/dist/*.whl

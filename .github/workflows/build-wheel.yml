@@ -48,7 +48,9 @@ jobs:
       - name: Verify wheel compatibility
         run: |
           pip install patchelf
-          patchelf --print-needed dist/*.whl | grep cuda
+          unzip -d tmp_wheel dist/*.whl
+          find tmp_wheel -name "*.so" -exec patchelf --print-needed {} \; | grep cuda
+        
 
       - name: Upload wheel
         uses: actions/upload-artifact@v4

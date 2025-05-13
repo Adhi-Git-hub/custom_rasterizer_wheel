@@ -23,7 +23,7 @@ jobs:
       - name: Install system dependencies
         run: |
           apt-get update
-          apt-get install -y python3.11 python3.11-dev python3-pip build-essential ninja-build binutils
+          apt-get install -y python3.11 python3.11-dev python3-pip build-essential ninja-build binutils unzip
           ln -s /usr/bin/python3.11 /usr/bin/python
 
       - name: Install PyTorch with CUDA 12.1 (compatible with 12.5)

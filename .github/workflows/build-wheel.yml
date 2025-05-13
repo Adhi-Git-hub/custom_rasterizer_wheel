@@ -13,10 +13,12 @@ jobs:
         shell: bash
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      - name: Install Git and manually clone repo (with submodules)
+        run: |
+          apt-get update
+          apt-get install -y git
+          git clone --recurse-submodules https://github.com/Adhi-Git-hub/custom_rasterizer_wheel.git .
+          ls -la
 
       - name: Install system dependencies
         run: |

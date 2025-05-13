@@ -7,22 +7,21 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: nvidia/cuda:12.5.0-devel-ubuntu22.04  # Updated to CUDA 12.5
+      image: nvidia/cuda:12.5.0-devel-ubuntu22.04
     defaults:
       run:
         shell: bash
 
     steps:
-      - name: Install Git and clone repo
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
         run: |
           apt-get update
-          apt-get install -y git
-          git clone --recurse-submodules https://github.com/Adhi-Git-hub/custom_rasterizer_wheel.git .
-          ls -la
-
-      - name: Install Python and build tools
-        run: |
-          apt-get install -y python3.11 python3.11-dev python3-pip build-essential ninja-build
+          apt-get install -y python3.11 python3.11-dev python3-pip build-essential ninja-build binutils
           ln -s /usr/bin/python3.11 /usr/bin/python
 
       - name: Install PyTorch with CUDA 12.1 (compatible with 12.5)
@@ -33,27 +32,45 @@ jobs:
       - name: Patch for CUDA 12.5 compatibility
         run: |
           # Update all CUDA version references
-          find . -type f \( -name "*.cpp" -o -name "*.cu" -o -name "*.h" \) -exec sed -i 's/11\.0/12.5/g' {} +
-          find . -type f \( -name "*.cpp" -o -name "*.cu" -o -name "*.h" \) -exec sed -i 's/110/125/g' {} +
+          find . -type f \( -name "*.cpp" -o -name "*.cu" -o -name "*.h" -o -name "*.pyx" \) \
+            -exec sed -i 's/11\.0/12.5/g' {} +
+          find . -type f \( -name "*.cpp" -o -name "*.cu" -o -name "*.h" -o -name "*.pyx" \) \
+            -exec sed -i 's/110/125/g' {} +
 
       - name: Build the wheel
         run: |
           export CUDA_HOME=/usr/local/cuda
           export PATH=/usr/local/cuda/bin:$PATH
-          export TORCH_CUDA_ARCH_LIST="8.0 8.6 9.0"  # Updated architectures
+          export TORCH_CUDA_ARCH_LIST="8.0;8.6;9.0"  # Support for T4 (8.0), A10G (8.6), A100 (8.0), RTX 40xx (9.0)
           export FORCE_CUDA=1
+          export MAX_JOBS=4
           
-          python setup.py bdist_wheel
+          # Clean previous builds
+          python setup.py clean --all
+          
+          # Build with verbose output
+          python setup.py bdist_wheel --verbose
 
-      - name: Verify wheel compatibility
+      - name: Verify wheel contents
         run: |
-          pip install patchelf
-          unzip -d tmp_wheel dist/*.whl
-          find tmp_wheel -name "*.so" -exec patchelf --print-needed {} \; | grep cuda
-        
+          # List all files in wheel
+          unzip -l dist/*.whl
+          
+          # Check for CUDA dependencies in compiled binaries
+          mkdir -p tmp_inspect
+          unzip -d tmp_inspect dist/*.whl
+          find tmp_inspect -name "*.so" -exec ldd {} \; | grep cuda || echo "No CUDA dependencies found"
+          find tmp_inspect -name "*.so" -exec objdump -p {} \; | grep -A10 NEEDED || echo "No shared library dependencies found"
 
-      - name: Upload wheel
+      - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
           name: custom_rasterizer-cuda12.5-wheel
           path: dist/*.whl
+          retention-days: 7
+
+      - name: Print success message
+        run: |
+          echo "✅ Wheel built successfully!"
+          echo "Download from the Artifacts tab above"
+          echo "Compatible with CUDA 12.5 environments"

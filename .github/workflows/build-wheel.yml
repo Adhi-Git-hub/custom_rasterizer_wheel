@@ -1,4 +1,4 @@
-name: Build custom_rasterizer wheel (Python 3.11, CUDA 12.6)
+name: Build custom_rasterizer wheel (Python 3.11, PyTorch 2.7.0)
 
 on:
   workflow_dispatch:
@@ -25,24 +25,22 @@ jobs:
           git clone --recurse-submodules https://github.com/Adhi-Git-hub/custom_rasterizer_wheel.git .
           ls -la
 
-      - name: Install PyTorch with CUDA 12.6
+      - name: Install PyTorch 2.7.0 with CUDA 12.6
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 \
-            --index-url https://download.pytorch.org/whl/cu121
+          python -m pip install torch==2.7.0 torchvision==0.18.0 \
+            --index-url https://download.pytorch.org/whl/cu126
 
-      - name: Patch for CUDA 12.6 compatibility
+      - name: Patch for PyTorch 2.7.0 compatibility
         run: |
           find . -type f \( -name "*.cpp" -o -name "*.cu" -o -name "*.h" -o -name "*.pyx" \) \
-            -exec sed -i 's/11\.0/12.6/g' {} +
-          find . -type f \( -name "*.cpp" -o -name "*.cu" -o -name "*.h" -o -name "*.pyx" \) \
-            -exec sed -i 's/110/126/g' {} +
+            -exec sed -i 's/torch\.version\.cuda/"12.6"/g' {} +
 
       - name: Build the wheel
         run: |
           export CUDA_HOME=/usr/local/cuda
           export PATH=/usr/local/cuda/bin:$PATH
-          export TORCH_CUDA_ARCH_LIST="8.0"  # Tesla T4 specific
+          export TORCH_CUDA_ARCH_LIST="8.0"
           export FORCE_CUDA=1
           export MAX_JOBS=4
           
@@ -57,20 +55,12 @@ jobs:
           find tmp_inspect -name "*.so" -exec sh -c '
             echo "\nChecking: $1"
             ldd "$1" | grep -i "libtorch\|cuda" || true
-            nm -D "$1" | grep "torchInternalAssertFail" || true
             objdump -p "$1" | grep -A5 NEEDED
           ' sh {} \;
 
       - name: Upload wheel
         uses: actions/upload-artifact@v4
         with:
-          name: custom_rasterizer-cuda12.6-wheel
+          name: custom_rasterizer-torch270-cuda126
           path: dist/*.whl
           retention-days: 7
-
-      - name: Print installation instructions
-        run: |
-          echo "✅ Wheel built successfully!"
-          echo "To install in Colab:"
-          echo "!pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 --index-url https://download.pytorch.org/whl/cu121"
-          echo "!pip install your_wheel_file.whl --force-reinstall"

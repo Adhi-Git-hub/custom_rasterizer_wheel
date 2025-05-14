@@ -1,4 +1,4 @@
-name: Build custom_rasterizer wheel (Python 3.11, CUDA 12.5)
+name: Build custom_rasterizer wheel (Python 3.11, CUDA 12.6)
 
 on:
   workflow_dispatch:
@@ -7,72 +7,71 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: nvidia/cuda:12.5.0-devel-ubuntu22.04
+      image: nvidia/cuda:12.5.0-devel-ubuntu22.04  # Keep 12.5 for build tools
     defaults:
       run:
         shell: bash
 
     steps:
-      - name: Install Git and manually clone repo (with submodules)
-        run: |
-          apt-get update
-          apt-get install -y git
-          git clone --recurse-submodules https://github.com/Adhi-Git-hub/custom_rasterizer_wheel.git .
-          ls -la
-
       - name: Install system dependencies
         run: |
           apt-get update
-          apt-get install -y python3.11 python3.11-dev python3-pip build-essential ninja-build binutils unzip
+          apt-get install -y git python3.11 python3.11-dev python3-pip \
+            build-essential ninja-build binutils unzip patchelf
           ln -s /usr/bin/python3.11 /usr/bin/python
 
-      - name: Install PyTorch with CUDA 12.1 (compatible with 12.5)
+      - name: Clone repository
+        run: |
+          git clone --recurse-submodules https://github.com/Adhi-Git-hub/custom_rasterizer_wheel.git .
+          ls -la
+
+      - name: Install PyTorch 2.7.0 with CUDA 12.6
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 --index-url https://download.pytorch.org/whl/cu121
+          python -m pip install torch==2.7.0+cu126 torchvision==0.18.0+cu126 \
+            --index-url https://download.pytorch.org/whl/cu126
 
-      - name: Patch for CUDA 12.5 compatibility
+      - name: Patch for CUDA 12.6 compatibility
         run: |
-          # Update all CUDA version references
           find . -type f \( -name "*.cpp" -o -name "*.cu" -o -name "*.h" -o -name "*.pyx" \) \
-            -exec sed -i 's/11\.0/12.5/g' {} +
+            -exec sed -i 's/11\.0/12.6/g' {} +
           find . -type f \( -name "*.cpp" -o -name "*.cu" -o -name "*.h" -o -name "*.pyx" \) \
-            -exec sed -i 's/110/125/g' {} +
+            -exec sed -i 's/110/126/g' {} +
 
       - name: Build the wheel
         run: |
           export CUDA_HOME=/usr/local/cuda
           export PATH=/usr/local/cuda/bin:$PATH
-          export TORCH_CUDA_ARCH_LIST="8.0;8.6;9.0"  # Support for T4 (8.0), A10G (8.6), A100 (8.0), RTX 40xx (9.0)
+          export TORCH_CUDA_ARCH_LIST="8.0"  # Tesla T4 specific
           export FORCE_CUDA=1
           export MAX_JOBS=4
           
-          # Clean previous builds
           python setup.py clean --all
-          
-          # Build with verbose output
           python setup.py bdist_wheel --verbose
 
-      - name: Verify wheel contents
+      - name: Verify wheel compatibility
         run: |
-          # List all files in wheel
-          unzip -l dist/*.whl
-          
-          # Check for CUDA dependencies in compiled binaries
           mkdir -p tmp_inspect
           unzip -d tmp_inspect dist/*.whl
-          find tmp_inspect -name "*.so" -exec ldd {} \; | grep cuda || echo "No CUDA dependencies found"
-          find tmp_inspect -name "*.so" -exec objdump -p {} \; | grep -A10 NEEDED || echo "No shared library dependencies found"
+          
+          # Check for correct PyTorch/CUDA symbols
+          find tmp_inspect -name "*.so" -exec sh -c '
+            echo "\nChecking: $1"
+            ldd "$1" | grep -i "libtorch\|cuda" || true
+            nm -D "$1" | grep "torchInternalAssertFail" || true
+            objdump -p "$1" | grep -A5 NEEDED
+          ' sh {} \;
 
-      - name: Upload wheel artifact
+      - name: Upload wheel
         uses: actions/upload-artifact@v4
         with:
-          name: custom_rasterizer-cuda12.5-wheel
+          name: custom_rasterizer-cuda12.6-wheel
           path: dist/*.whl
           retention-days: 7
 
-      - name: Print success message
+      - name: Print installation instructions
         run: |
           echo "✅ Wheel built successfully!"
-          echo "Download from the Artifacts tab above"
-          echo "Compatible with CUDA 12.5 environments"
+          echo "To install in Colab:"
+          echo "!pip install torch==2.7.0+cu126 torchvision==0.18.0+cu126 --index-url https://download.pytorch.org/whl/cu126"
+          echo "!pip install your_wheel_file.whl --force-reinstall"

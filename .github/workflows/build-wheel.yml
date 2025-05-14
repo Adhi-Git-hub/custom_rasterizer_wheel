@@ -7,7 +7,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: nvidia/cuda:12.5.0-devel-ubuntu22.04  # Keep 12.5 for build tools
+      image: nvidia/cuda:12.5.0-devel-ubuntu22.04
     defaults:
       run:
         shell: bash
@@ -25,11 +25,11 @@ jobs:
           git clone --recurse-submodules https://github.com/Adhi-Git-hub/custom_rasterizer_wheel.git .
           ls -la
 
-      - name: Install PyTorch 2.7.0 with CUDA 12.6
+      - name: Install PyTorch with CUDA 12.6
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install torch==2.7.0+cu126 torchvision==0.18.0+cu126 \
-            --index-url https://download.pytorch.org/whl/cu126
+          python -m pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 \
+            --index-url https://download.pytorch.org/whl/cu121
 
       - name: Patch for CUDA 12.6 compatibility
         run: |
@@ -54,7 +54,6 @@ jobs:
           mkdir -p tmp_inspect
           unzip -d tmp_inspect dist/*.whl
           
-          # Check for correct PyTorch/CUDA symbols
           find tmp_inspect -name "*.so" -exec sh -c '
             echo "\nChecking: $1"
             ldd "$1" | grep -i "libtorch\|cuda" || true
@@ -73,5 +72,5 @@ jobs:
         run: |
           echo "✅ Wheel built successfully!"
           echo "To install in Colab:"
-          echo "!pip install torch==2.7.0+cu126 torchvision==0.18.0+cu126 --index-url https://download.pytorch.org/whl/cu126"
+          echo "!pip install torch==2.2.0+cu121 torchvision==0.17.0+cu121 --index-url https://download.pytorch.org/whl/cu121"
           echo "!pip install your_wheel_file.whl --force-reinstall"

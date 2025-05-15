@@ -1,4 +1,4 @@
-name: Build custom_rasterizer wheel (Python 3.11, PyTorch 2.7.0)
+name: Build custom_rasterizer wheel (Python 3.11, PyTorch 2.7.0, CUDA 12.6)
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: nvidia/cuda:12.1.1-devel-ubuntu22.04  # Matches PyTorch's CUDA 12.1
+      image: nvidia/cuda:12.6.2-devel-ubuntu22.04  # CUDA 12.6 build env (safe for Colab)
     defaults:
       run:
         shell: bash
@@ -17,53 +17,40 @@ jobs:
         run: |
           apt-get update
           apt-get install -y git python3.11 python3.11-dev python3-pip \
-            build-essential ninja-build binutils unzip patchelf
-          ln -s /usr/bin/python3.11 /usr/bin/python
+                             ninja-build unzip patchelf build-essential
+          ln -sf /usr/bin/python3.11 /usr/bin/python
 
-      - name: Clone repository
+      - name: Clone repo
         run: |
           git clone --recurse-submodules https://github.com/Adhi-Git-hub/custom_rasterizer_wheel.git .
           ls -la
 
-      - name: Install exact PyTorch version
+      - name: Install PyTorch 2.7.0 + cu126
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install torch==2.7.0+cu121 torchvision==0.17.0+cu121 \
-            --index-url https://download.pytorch.org/whl/cu121
-
-      - name: Configure dynamic linking correctly
-        run: |
-          # Set RPATH to find PyTorch libraries
-          export LD_RUN_PATH=/usr/local/lib/python3.11/dist-packages/torch/lib:$LD_RUN_PATH
-          export CFLAGS="-L/usr/local/lib/python3.11/dist-packages/torch/lib"
-          export LDFLAGS="-Wl,-rpath,/usr/local/lib/python3.11/dist-packages/torch/lib"
+          python -m pip install torch==2.7.0+cu126 torchvision==0.18.0+cu126 \
+            --index-url https://download.pytorch.org/whl/cu126
 
       - name: Build the wheel
         run: |
           export CUDA_HOME=/usr/local/cuda
-          export PATH=/usr/local/cuda/bin:$PATH
-          export TORCH_CUDA_ARCH_LIST="8.0"  # Tesla T4
+          export PATH=$CUDA_HOME/bin:$PATH
           export FORCE_CUDA=1
           export MAX_JOBS=4
-          
+          export TORCH_CUDA_ARCH_LIST="8.0"
+
           python setup.py clean --all
           python setup.py bdist_wheel --verbose
 
-      - name: Verify wheel
+      - name: Verify .so dependencies
         run: |
           mkdir -p tmp_inspect
           unzip -d tmp_inspect dist/*.whl
-          
-          echo "=== Critical Checks ==="
-          find tmp_inspect -name "*.so" -exec sh -c '
-            echo "\nInspecting $1:"
-            patchelf --print-rpath "$1"
-            ldd "$1" | grep -i "torch\|cuda" || echo "No Torch/CUDA dependencies"
-            objdump -p "$1" | grep -A10 NEEDED
-          ' sh {} \;
+          echo "🔍 ldd on .so:"
+          find tmp_inspect -name "*.so" -exec ldd {} \;
 
-      - name: Upload artifact
+      - name: Upload wheel
         uses: actions/upload-artifact@v4
         with:
-          name: custom_rasterizer-torch2.7-cuda12.1
+          name: custom_rasterizer-cu126
           path: dist/*.whl
